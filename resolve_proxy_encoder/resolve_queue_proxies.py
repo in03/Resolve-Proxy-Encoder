@@ -1,4 +1,3 @@
-#!/usr/bin/env python3.6
 # Save proxy clip list
 
 import glob

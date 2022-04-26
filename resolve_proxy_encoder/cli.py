@@ -1,5 +1,3 @@
-#!/usr/bin/env python3.6
-
 from pyfiglet import Figlet
 from rich import print
 

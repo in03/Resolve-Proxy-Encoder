@@ -1,5 +1,3 @@
-#!/usr/bin/env python3.6
-
 """
 This file serves to return a DaVinci Resolve object
 """

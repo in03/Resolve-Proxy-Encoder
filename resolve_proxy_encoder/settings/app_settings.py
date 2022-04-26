@@ -1,11 +1,7 @@
-#!/usr/bin/env python3.6
-
-from cgitb import text
 import os
 import shutil
 import webbrowser
 from pathlib import Path
-import time
 
 from deepdiff import DeepDiff
 from resolve_proxy_encoder.helpers import (
@@ -169,7 +165,7 @@ class Settings(metaclass=Singleton):
         # Check for missing settings
         if diffs.get("dictionary_item_removed"):
 
-            self.spinner.fail("� ")
+            self.spinner.fail("❌ ")
             [
                 logger.error(f"Missing setting -> {x}")
                 for x in diffs["dictionary_item_removed"]
@@ -191,7 +187,7 @@ class Settings(metaclass=Singleton):
 
         except SchemaError as e:
 
-            self.spinner.fail("� ")
+            self.spinner.fail("❌ ")
             logger.error(
                 f"[red]Couldn't validate application settings![/]\n{e}\n"
                 + f"[red]Exiting...[/]\n"

@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "resolve-proxy-encoder"
-version = "0.1.0"
+version = "0.2.0"
 description = "Transcode source media in DaVinci Resolve using multiple machines. Great for quickly creating proxies without interrupting work."
 authors = ["Caleb Trevatt <in03@users.noreply.github.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.6.2,<3.7.*"
+python = ">=3.6.2,<4.0"
 celery = "^5.1.2"
 rich = "^10.12.0"
 ffmpy = "^0.3.0"

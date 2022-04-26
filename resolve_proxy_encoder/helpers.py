@@ -84,7 +84,7 @@ def app_exit(level: int = 0, timeout: int = 0, cleanup_funcs: list = None):
                 x()
 
     # Exit statement
-    colour = "green" if level is 0 else "yellow"
+    colour = "green" if level == 0 else "yellow"
 
     # Newline
     print()

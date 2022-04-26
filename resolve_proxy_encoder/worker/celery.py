@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # Celery settings should be configured using celery setting or environment variables.
 # See the .env-sample if using Docker, or celery_settings-sample.py if running in virtual env.
 

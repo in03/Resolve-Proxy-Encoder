@@ -7,8 +7,9 @@ app:
   disable_version_constrain: false # DANGEROUS! To work, both queuer and worker must disable constrain.
 
 paths:
-  proxy_path_root: R:/ProxyMedia # Proxy media retains source folder structure
-  ffmpeg_logfile_path: R:/ProxyMedia/logs
+  proxy_in_project: false # Use Resolve 18's new "Proxy Subfolders in Media Locations" to allow watch folder style linking 
+  proxy_path_root: R:/ProxyMedia # Keep proxies on a single drive, retaining structure, and manually link. Ignored when proxy_in_project is enabled.
+  ffmpeg_logfile_path: R:/ProxyMedia/logs # Ignored when proxy_in_project is enabled. 
 
 proxy_settings:
   ffmpeg_loglevel: error # "quiet", "panic", "fatal", "error", "warning", "info", "verbose", "debug"

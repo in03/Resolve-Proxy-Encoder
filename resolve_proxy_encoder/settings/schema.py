@@ -14,6 +14,7 @@ settings_schema = Schema(
             "disable_version_constrain": bool,
         },
         "paths": {
+            "proxy_in_project": bool,
             "proxy_path_root": lambda p: os.path.exists(p),
             "ffmpeg_logfile_path": lambda p: os.path.exists(os.path.dirname(p)),
         },

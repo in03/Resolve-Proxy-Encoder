@@ -20,7 +20,7 @@ Unfortunately Resolve doesn't have a remote-rendering, or even background-render
 
 ## What does it need?
 **This app has a few non-negotiable prerequisites:**
-- Python 3.6 **ONLY** (DaVinci Resolve's Python API requires it)
+- Python 3.6 **ONLY** on Resolve 17 OR Python 3.3 to Python 3.10 on Resolve 18
 - DaVinci Resolve Studio, with scripting set up (read Resolve's scripting README)
 - Redis or RabbitMQ broker (preferably running on a NAS or server)
 - Worker computers (decent resources, connected to LAN, can access source media and proxies output folder)
@@ -34,27 +34,30 @@ Unfortunately Resolve doesn't have a remote-rendering, or even background-render
 
 ## How do I install it?
 
-### A Warning about Python 3.6
+### A Warning about Python on Resolve 17 and Below
 
-Because DaVinci Resolve requires Python 3.6 to communicate with its API, no versions over Python 3.6 will work with *Resolve Proxy Encoder*.
+DaVinci Resolve 17 and below require Python 3.6 to communicate with the Resolve API, no versions over Python 3.6 will work.
 Unfortunately this means that *Resolve Proxy Encoder* may get stuck using older versions of certain packages as they begin to drop support for 3.6.
 It also means that security patches for some dependencies won't make it into *Resolve Proxy Encoder* 
 This kind of setup almost guarantees dependency conflicts if you have multiple Python CLI tools you keep installed.
 To mitigate this you can:
 
+- Install Resolve 18, use newer Python versions.
+
 - Use Python 3.6 for *Resolve Proxy Encoder* **ONLY** and install a newer Python alongside for your other needs.
 
 - Install a tool like *pipx* that isolates Python CLI tools with their own virtual environments but keeps them on path.
+(Recommend doing this anyway to keep dependencies isolated!)
 
 
 ### CLI / Worker
 The CLI app is bundled with everything necessary to queue from Resolve and start workers that run the encoding.
 ```
-py -3.6 -m pip install git+https://github.com/in03/Resolve-Proxy-Encoder
-```
-Or with *pipx*
-``` 
 pipx install git+https://github.com/in03/Resolve-Proxy-Encoder
+```
+Or with *pip*
+``` 
+py -3.6 -m pip install git+https://github.com/in03/Resolve-Proxy-Encoder
 ```
 ### Broker
 The broker needs to be accessible by each computer over LAN.
