@@ -1,12 +1,6 @@
 # Link proxies
 
 import os
-import tkinter
-import tkinter.messagebox
-import traceback
-from tkinter import filedialog
-
-from colorama import Fore, init
 from resolve_proxy_encoder import helpers
 from resolve_proxy_encoder.settings.app_settings import Settings
 
@@ -21,17 +15,14 @@ project = resolve_obj["project"]
 timeline = resolve_obj["timeline"]
 media_pool = resolve_obj["media_pool"]
 
-root = tkinter.Tk()
-root.withdraw()
-
 
 def get_proxy_path():
 
     proxy_path_root = config["paths"]["proxy_path_root"]
 
-    f = filedialog.askdirectory(initialdir=proxy_path_root, title="Link proxies")
+    f = input("Enter path to search for proxies: ")
     if f is None:
-        print("User cancelled dialog. Exiting.")
+        print("User cancelled. Exiting.")
         exit(0)
     return f
 
@@ -44,14 +35,15 @@ def recurse_dir(root):
     all_files = [
         os.path.join(root, f) for root, dirs, files in os.walk(root) for f in files
     ]
+    print(f"Found {len(all_files)} files in folder {root}")
     return all_files
 
 
-def filter_files(dir_, acceptable_exts):
+def filter_files(dir_, extension_whitelist):
     """Filter files by allowed filetype"""
 
-    # print(f"{Fore.CYAN}{timeline.GetName()} - Video track count: {track_len}")
-    allowed = [x for x in dir_ if os.path.splitext(x) in acceptable_exts]
+    # print(f"{timeline.GetName()} - Video track count: {track_len}")
+    allowed = [x for x in dir_ if os.path.splitext(x) in extension_whitelist]
     return allowed
 
 
@@ -61,7 +53,7 @@ def get_track_items(timeline, track_type="video"):
     track_len = timeline.GetTrackCount("video")
 
     if config["app"]["loglevel"] == "DEBUG":
-        print(f"{Fore.CYAN}{timeline.GetName()} - Video track count: {track_len}")
+        print(f"{timeline.GetName()} - Video track count: {track_len}")
 
     items = []
 
@@ -131,7 +123,7 @@ def __link_proxies(proxy_files, clips):
             proxy_name = os.path.splitext(os.path.basename(proxy))[0]
             if proxy in failed_proxies:
                 if config["app"]["loglevel"] == "DEBUG":
-                    print(f"{Fore.YELLOW}Skipping {proxy_name}, already failed.")
+                    print(f"Skipping {proxy_name}, already failed.")
                 break
 
             try:
@@ -141,24 +133,24 @@ def __link_proxies(proxy_files, clips):
 
                 if proxy_name.lower() in filename.lower():
 
-                    print(f"{Fore.GREEN}Found match:")
+                    print(f"Found match:")
                     print(f"{proxy} &\n{path}")
 
                     if media_pool_item.LinkProxyMedia(proxy):
 
-                        print(f"{Fore.GREEN}Linked\n")
+                        print(f"Linked\n")
                         linked_proxies.append(proxy)
                         linked_clips.append(clip)
 
                     else:
-                        print(f"{Fore.RED}Failed link.\n")
+                        print(f"Failed link.\n")
                         failed_proxies.append(proxy)
 
             except AttributeError:
 
                 if config["app"]["loglevel"] == "DEBUG":
                     print(
-                        f"{Fore.YELLOW}{clip.GetName()} has no 'file path' attribute,"
+                        f"{clip.GetName()} has no 'file path' attribute,"
                         + " probably Resolve internal media."
                     )
 
@@ -185,17 +177,17 @@ def link_proxies(proxy_files):
 
         if len(unlinked_source) == 0:
             if config["app"]["loglevel"] == "DEBUG":
-                print(f"{Fore.YELLOW}No more clips to link in {timeline_data['name']}")
+                print(f"No more clips to link in {timeline_data['name']}")
             continue
         else:
-            print(f"{Fore.CYAN}Searching timeline {timeline_data['name']}")
+            print(f"Searching timeline {timeline_data['name']}")
 
         unlinked_proxies = [x for x in proxy_files if x not in linked]
         print(f"Unlinked source count: {len(unlinked_source)}")
         print(f"Unlinked proxies count: {len(unlinked_proxies)}")
 
         if len(unlinked_proxies) == 0:
-            print(f"{Fore.YELLOW}No more proxies to link in {timeline_data['name']}")
+            print(f"No more proxies to link in {timeline_data['name']}")
             return
 
         linked_, failed_ = __link_proxies(proxy_files, clips)
@@ -208,7 +200,7 @@ def link_proxies(proxy_files):
 
     if len(failed) > 0:
         print(
-            f"{Fore.RED}The following files matched, but couldn't be linked. Suggest rerendering them:"
+            f"The following files matched, but couldn't be linked. Suggest rerendering them:"
         )
         [print(os.path.basename(x)) for x in failed]
         print()
@@ -218,20 +210,15 @@ def link_proxies(proxy_files):
 
 def main():
     try:
-        init(autoreset=True)
-
         proxy_dir = get_proxy_path()
 
         print(f"Passed directory: '{proxy_dir}'\n")
 
         all_files = recurse_dir(proxy_dir)
-        proxy_files = filter_files(all_files, config["filters"]["acceptable_exts"])
+        proxy_files = filter_files(all_files, config["filters"]["extension_whitelist"])
         linked = link_proxies(proxy_files)
 
     except Exception as e:
-        tb = traceback.format_exc()
-        print(tb)
-        tkinter.messagebox.showinfo("ERROR", tb)
         print("ERROR - " + str(e))
 
 
