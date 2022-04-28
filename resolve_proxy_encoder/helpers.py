@@ -2,6 +2,8 @@
 import json
 import logging
 import os
+import pathlib
+import socket
 import subprocess
 import sys
 import time
@@ -205,6 +207,43 @@ def get_resolve_objects():
         timeline=timeline,
         media_pool=media_pool,
     )
+
+
+def resolve_network_path(local_path, strict=True):
+    """
+    Resolve cross-platform network paths from local mapped mounts
+    Args:
+        - local_path (str): local path to resolve
+        - strict (bool): return None for unresolvable path or re-return local_path
+
+    """
+
+    abspath = pathlib.Path(local_path).resolve()
+
+    try:
+
+        # First two segments will be leading slashes
+        path_segs = str(abspath).split(os.path.sep)
+        ip = path_segs[2]
+
+        hostname = socket.gethostbyaddr(ip)[0]
+
+    except IndexError or socket.gaierror as e:
+
+        error_msg = f"Path is not a network location or IP unresolvable\n{e}"
+
+        if strict:
+            logging.error(error_msg)
+            return None
+
+        else:
+            logging.debug(error_msg)
+            return local_path
+    else:
+
+        # Substitute hostname
+        path_segs[2] = hostname
+        return os.path.sep.join(path_segs)
 
 
 def get_package_current_commit(package_name: str) -> Union[str, None]:

@@ -1,16 +1,19 @@
 import os
+import re
 import shutil
 import webbrowser
+from functools import reduce
+from operator import getitem
 from pathlib import Path
 
 from deepdiff import DeepDiff
 from resolve_proxy_encoder.helpers import (
+    app_exit,
     get_rich_logger,
     install_rich_tracebacks,
-    app_exit,
 )
 from rich import print
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from ruamel.yaml import YAML
 from yaspin import yaspin
 
@@ -45,6 +48,9 @@ class Settings(metaclass=Singleton):
     ):
 
         self.yaml = YAML()
+        self.yaml.indent(mapping=2, sequence=4, offset=2)
+        self.yaml.default_flow_style = False
+
         self.default_file = default_settings_file
         self.user_file = user_settings_file
 
@@ -67,7 +73,7 @@ class Settings(metaclass=Singleton):
         self._ensure_user_file()
         self.user_settings = self._get_user_settings()
         self._ensure_user_keys()
-        self._validate_schema(self.user_settings)
+        self._validate_schema()
 
         self.spinner.ok("✅ ")
 
@@ -86,6 +92,35 @@ class Settings(metaclass=Singleton):
 
         with open(self.user_file, "r") as file:
             return self.yaml.load(file)
+
+    def update_nested_setting(self, key_list, value):
+        """
+        Update nested user settings with key list.
+
+        Fully loads and rewrites the user settings file.
+        As such, invalid keys and values will be left out of the updated file.
+
+        Args:
+            - self (contains user settings file path)
+            - key_list (list of keys to access nested key/val)
+            - value (new value to update)
+
+        Returns:
+            Nothing
+
+        Raises:
+            Nothing
+
+        """
+
+        reduce(getitem, key_list[:-1], self.user_settings)[key_list[-1]] = value
+
+        with open(self.user_file, "w") as file_:
+
+            logger.debug(f"[magenta]Writing updated settings to '{self.user_file}'")
+            self.yaml.dump(self.user_settings, file_)
+
+        return
 
     def _ensure_user_file(self):
         """Copy default settings to user settings if it doesn't exist
@@ -144,46 +179,157 @@ class Settings(metaclass=Singleton):
     def _ensure_user_keys(self):
         """Ensure user settings have all keys in default settings"""
 
-        # TODO: Properly catch Schema exceptions as SchemaWrongKeyError, etc.
-        # It's just generic SchemaError for now. If we can catch them, we don't need this func.
-        # We can also use the default option in Schema to add default keys.
-        # Then we can get rid of the default_settings.yml file.
+        self.spinner.stop()
 
         diffs = DeepDiff(self.default_settings, self.user_settings)
 
         # Check for unknown settings
         if diffs.get("dictionary_item_added"):
 
-            self.spinner.stop()
+            # listcomp log warning for each unknown setting
             [
-                logger.warning(f"Unknown setting -> {x} will be ignored!")
+                logger.warning(
+                    f'[yellow]Unknown setting[/] [white]"{x}"[/]'
+                    "[yellow] will be ignored![/]"
+                )
                 for x in diffs["dictionary_item_added"]
             ]
             print()  # Newline
-            self.spinner.start()
 
-        # Check for missing settings
-        if diffs.get("dictionary_item_removed"):
+        def _prompt_setting_substitution(self, setting_name, key_list):
 
-            self.spinner.fail("❌ ")
-            [
-                logger.error(f"Missing setting -> {x}")
-                for x in diffs["dictionary_item_removed"]
-            ]
+            # Get default value
+            if len(key_list) > 0:
+                logger.debug("Getting default value from nested keys")
+                default_value = reduce(dict.get, key_list, self.default_settings)
 
-            logger.critical(
-                "Can't continue. Please define missing settings! Exiting..."
-            )
-            app_exit(1, -1)
+            else:
+                logger.debug("Standard dict lookup")
+                default_value = self.default_settings[key_list]
 
-    def _validate_schema(self, settings):
+            print(f'[red bold]Missing setting [green]"{setting_name}"[/][/]')
+
+            try:
+
+                custom_value = Prompt.ask(
+                    f"[cyan]Type a new value or leave blank to use default[/] ('{default_value}')"
+                )
+
+            except KeyboardInterrupt:
+
+                print()
+                self.spinner.fail("❌ ")
+                # Log all missing settings so user doesn't have to know each missing.
+                [
+                    logger.error(f'[red bold]Missing setting "{x}"')
+                    for x in diffs["dictionary_item_removed"]
+                ]
+
+                print()
+                print("[red bold]Cannot continue.\nPlease define missing settings!")
+                app_exit(1, -1)
+
+            else:
+
+                if not custom_value:
+
+                    print(f"[green]Using default '{default_value}'[/]")
+                    custom_value = default_value
+
+                else:
+
+                    print(f"[green]Using custom value '{custom_value}'[/]")
+
+                # TODO: Implement type validation for custom value and prompt retry on fail
+                self.update_nested_setting(key_list, custom_value)
+
+            finally:
+
+                print()
+
+        def _get_missing_settings(self):
+
+            """
+            Prompt substitution for settings present in default-settings that are not present in user-settings.
+
+            Calls `_confirm_setting_substitution` if settings require substitution.
+
+            """
+
+            if diffs.get("dictionary_item_removed"):
+
+                self.spinner.stop()
+                logger.error(
+                    f"[bold red]Required user settings are missing!\n[/]"
+                    f"[yellow]Follow prompts to substitute missing settings with default or custom values.\n"
+                    f"Or edit settings manually here and re-run: '{self.user_file}'\n"
+                )
+                print()
+
+                for x in diffs["dictionary_item_removed"]:
+
+                    # Match all keys in diff string
+                    key_list = re.findall(r"\['(\w*)'\]", x)
+                    _prompt_setting_substitution(self, x, key_list)
+
+            def _catch_empty_setting_section_with_inline_comment(self):
+
+                """
+                Catch setting sections that don't show as empty because of inline comments.
+
+                Diff usually gives `dictionary_item_removed` when a section is empty, but
+                will actually show `type_changes` with `ruamel.yaml.comments.CommentedMap` as `old_type`
+                if the setting section has an inline comment after the setting section key.
+                This leads to inline comments breaking setting-substitution if all child settings are missing.
+                Bit of an edge case really.
+
+                Calls `_confirm_setting_substitution` if settings require substitution.
+
+                Args:
+                    self
+                Returns:
+                    Nothing
+                Raises:
+                    Nothing
+                """
+
+                if diffs.get("type_changes"):
+
+                    self.spinner.stop()
+
+                    # Match root keys with entire missing sections except for an inline comment
+                    empty_root_keys = re.findall(
+                        r"root\['(\w*)'\]\": {'old_type': <class 'ruamel\.yaml\.comments\.CommentedMap'>",
+                        str(diffs),
+                    )
+
+                    # If only value is a comment, section is empty
+                    for key in empty_root_keys:
+
+                        # TODO: Fix this. `_prompt_setting_substitution` expects a list
+                        # this is not the way to do it
+                        # labels: enhancement
+
+                        single_root_key_list = []
+                        single_root_key_list.append(key)
+                        _prompt_setting_substitution(
+                            self, "".join(key), single_root_key_list
+                        )
+
+            _catch_empty_setting_section_with_inline_comment(self)
+
+        _get_missing_settings(self)
+
+        print()
+
+    def _validate_schema(self):
         """Validate user settings against schema"""
 
         logger.debug(f"Validating user settings against schema")
 
         try:
 
-            settings_schema.validate(settings)
+            settings_schema.validate(self.user_settings)
 
         except SchemaError as e:
 

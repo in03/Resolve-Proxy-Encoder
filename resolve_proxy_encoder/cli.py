@@ -1,3 +1,4 @@
+from pydoc import resolve
 from pyfiglet import Figlet
 from rich import print
 
@@ -15,7 +16,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from resolve_proxy_encoder import checks
-from resolve_proxy_encoder.helpers import get_rich_logger
+from resolve_proxy_encoder.helpers import get_rich_logger, resolve_network_path
 from resolve_proxy_encoder.settings.app_settings import Settings
 
 # Init classes
@@ -130,6 +131,9 @@ def init():
         github_url=config["app"]["update_check_url"],
         package_name="resolve_proxy_encoder",
     )
+
+    resolve_network_path(config["paths", "proxy_path_root"])
+
     # TODO: Add update method to settings class
     # There are a few dynamic variables that would be nice to have globally
     # E.g. `settings.add_setting(current_version)`
