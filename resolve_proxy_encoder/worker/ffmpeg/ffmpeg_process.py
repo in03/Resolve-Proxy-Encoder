@@ -1,32 +1,27 @@
+import logging
 import os
 import subprocess
-from pathlib import Path
 
-from resolve_proxy_encoder.settings.app_settings import Settings
-from resolve_proxy_encoder.helpers import (
-    app_exit,
-    get_rich_logger,
-    install_rich_tracebacks,
-)
 from rich.console import Console
 from rich.progress import (
     BarColumn,
     Progress,
     SpinnerColumn,
     TextColumn,
-    TimeElapsedColumn,
     TimeRemainingColumn,
 )
-from rich import print
 from rich.prompt import Confirm
 
 from ffmpeg import probe
 
-settings = Settings()
-config = settings.user_settings
+from ...app.utils import core
+from ...settings.manager import SettingsManager
 
-install_rich_tracebacks()
-logger = get_rich_logger(config["celery_settings"]["worker_loglevel"])
+config = SettingsManager()
+
+core.install_rich_tracebacks()
+logger = logging.getLogger(__name__)
+logger.setLevel(config["worker"]["loglevel"])
 
 
 class FfmpegProcess:
@@ -68,7 +63,7 @@ class FfmpegProcess:
             if not Confirm.ask(
                 f"[yellow]'{self._output_filepath}' already exists. Overwrite?[/]"
             ):
-                app_exit(0)
+                core.app_exit(0)
 
         self._ffmpeg_args += ["-y"]
 
@@ -144,10 +139,10 @@ class FfmpegProcess:
             logger.warning(
                 "[yellow][KeyboardInterrupt] FFmpeg process killed. Exiting...[/]"
             )
-            app_exit(0)
+            core.app_exit(0)
 
         except Exception as e:
             progress_bar.stop()
             process.kill()
             logger.critical(f"[red][Error] {e}\nExiting...[/]")
-            app_exit(1, -1)
+            core.app_exit(1, -1)

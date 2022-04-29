@@ -1,19 +1,22 @@
 # Link proxies
 
+import logging
 import os
-from resolve_proxy_encoder import helpers
-from resolve_proxy_encoder.settings.app_settings import Settings
+import tkinter
+import tkinter.messagebox
+import traceback
+from tkinter import filedialog
+from typing import Tuple
 
-settings = Settings()
-config = settings.user_settings
+from rich import print
 
+from ..app.utils import core
+from ..settings.manager import SettingsManager
 
-# Get global variables
-resolve_obj = helpers.get_resolve_objects()
-resolve = resolve_obj["resolve"]
-project = resolve_obj["project"]
-timeline = resolve_obj["timeline"]
-media_pool = resolve_obj["media_pool"]
+config = SettingsManager()
+
+core.install_rich_tracebacks()
+logger = logging.getLogger(__name__)
 
 
 def get_proxy_path():
@@ -42,7 +45,7 @@ def recurse_dir(root):
 def filter_files(dir_, extension_whitelist):
     """Filter files by allowed filetype"""
 
-    # print(f"{timeline.GetName()} - Video track count: {track_len}")
+    # print(f"{Fore.CYAN}{timeline.GetName()} - Video track count: {track_len}")
     allowed = [x for x in dir_ if os.path.splitext(x) in extension_whitelist]
     return allowed
 
@@ -51,9 +54,7 @@ def get_track_items(timeline, track_type="video"):
     """Retrieve all video track items from a given timeline object"""
 
     track_len = timeline.GetTrackCount("video")
-
-    if config["app"]["loglevel"] == "DEBUG":
-        print(f"{timeline.GetName()} - Video track count: {track_len}")
+    logger.debug(f"[cyan]{timeline.GetName()} - Video track count: {track_len}[/]")
 
     items = []
 
@@ -64,7 +65,7 @@ def get_track_items(timeline, track_type="video"):
     return items
 
 
-def get_resolve_timelines(active_timeline_first=True):
+def get_resolve_timelines(project, active_timeline_first=True):
     """Return a list of all Resolve timeline objects in current project."""
 
     timelines = []
@@ -107,7 +108,7 @@ def get_timeline_data(timeline):
     return data
 
 
-def __link_proxies(proxy_files, clips):
+def _link_proxies(proxy_files, clips):
     """Actual linking function.
     Matches filenames between lists of paths.
     'clips' actually needs to be a Resolve timeline item object.
@@ -115,15 +116,13 @@ def __link_proxies(proxy_files, clips):
 
     linked_proxies = []
     failed_proxies = []
-    linked_clips = []
 
     for proxy in proxy_files:
         for clip in clips:
 
             proxy_name = os.path.splitext(os.path.basename(proxy))[0]
             if proxy in failed_proxies:
-                if config["app"]["loglevel"] == "DEBUG":
-                    print(f"Skipping {proxy_name}, already failed.")
+                logger.warning(f"[yellow]Skipping {proxy_name}, already failed.")
                 break
 
             try:
@@ -133,40 +132,40 @@ def __link_proxies(proxy_files, clips):
 
                 if proxy_name.lower() in filename.lower():
 
-                    print(f"Found match:")
+                    logger.info("[cyan]Found match:")
                     print(f"{proxy} &\n{path}")
 
                     if media_pool_item.LinkProxyMedia(proxy):
 
-                        print(f"Linked\n")
+                        logger.info(f"[green]Linked\n")
                         linked_proxies.append(proxy)
-                        linked_clips.append(clip)
 
                     else:
-                        print(f"Failed link.\n")
+                        logger.error(f"[red]Failed link.\n")
                         failed_proxies.append(proxy)
 
             except AttributeError:
-
-                if config["app"]["loglevel"] == "DEBUG":
-                    print(
-                        f"{clip.GetName()} has no 'file path' attribute,"
-                        + " probably Resolve internal media."
-                    )
+                logger.debug(
+                    f"[magenta]{clip.GetName()} has no 'file path' attribute,"
+                    + " probably Resolve internal media."
+                )
 
     return linked_proxies, failed_proxies
 
 
-def link_proxies(proxy_files):
+def find_and_link_proxies(project, proxy_files) -> Tuple[list, list]:
     """Attempts to match source media in active Resolve project
     with a list of filepaths to proxy files."""
 
     linked = []
     failed = []
 
-    timelines = get_resolve_timelines()
+    timelines = get_resolve_timelines(project)
+
     if not timelines:
-        raise Exception("No timelines exist in current project.")
+
+        logger.error("[red]No timelines exist in current project.[/]")
+        return linked, failed
 
     # Get clips from all timelines.
     for timeline in timelines:
@@ -175,48 +174,108 @@ def link_proxies(proxy_files):
         clips = timeline_data["clips"]
         unlinked_source = [x for x in clips if x not in linked]
 
-        if len(unlinked_source) == 0:
-            if config["app"]["loglevel"] == "DEBUG":
-                print(f"No more clips to link in {timeline_data['name']}")
+        if not unlinked_source:
+            logger.info(f"[yellow]No more clips to link in {timeline_data['name']}")
             continue
         else:
-            print(f"Searching timeline {timeline_data['name']}")
+            logger.info(f"[cyan]Searching timeline {timeline_data['name']}")
 
         unlinked_proxies = [x for x in proxy_files if x not in linked]
-        print(f"Unlinked source count: {len(unlinked_source)}")
-        print(f"Unlinked proxies count: {len(unlinked_proxies)}")
+        logger.info(f"Unlinked source count: {len(unlinked_source)}")
+        logger.info(f"Unlinked proxies count: {len(unlinked_proxies)}")
 
-        if len(unlinked_proxies) == 0:
-            print(f"No more proxies to link in {timeline_data['name']}")
-            return
+        if not unlinked_proxies:
+            logger.info(f"[green]No more proxies to link[/]")
+            break
 
-        linked_, failed_ = __link_proxies(proxy_files, clips)
+        linked_, failed_ = _link_proxies(proxy_files, clips)
 
+        # Update lists for each timeline
         linked.extend(linked_)
         failed.extend(failed_)
 
-        if config["app"]["loglevel"] == "DEBUG":
-            print(f"Linked: {linked}, Failed: {failed}")
+    if linked:
 
-    if len(failed) > 0:
-        print(
-            f"The following files matched, but couldn't be linked. Suggest rerendering them:"
+        logger.info(f"[green]Link success:[/] {len(linked)}")
+
+    if failed:
+
+        logger.error(f"[red]Link fail:[/]{len(failed)}")
+        failed_paths = [(os.path.basename(x)) for x in failed]
+        logger.error(
+            f"[red]The following files matched, but couldn't be linked. Suggest rerendering them:[/]\n{failed_paths}"
         )
-        [print(os.path.basename(x)) for x in failed]
-        print()
 
-    return linked
+    return linked, failed
+
+
+def link_proxies_with_mpi(media_list):
+    """Iterate through media mutated during script call, attempt to link the source media"""
+
+    print(f"[cyan]Linking {len(media_list)} proxies.[/]")
+
+    link_success = []
+    link_fail = []
+
+    # Iterate through all available proxies
+    for media in media_list:
+
+        proxy = media.get("Unlinked Proxy", None)
+
+        if not proxy:
+            continue
+
+        if not os.path.exists(proxy):
+            logger.error(f"[red]Proxy media not found at '{proxy}'")
+
+        else:
+            # Set existing to none once linked
+            media.update({"Unlinked Proxy": None})
+
+        # TODO: Should probably use MediaInfo here instead of hardcode
+        media.update({"Proxy": "1280x720"})
+
+        # Actually link proxies
+        if media["media_pool_item"].LinkProxyMedia(proxy):
+
+            # TODO get this working!
+            logger.info(f"[green]Linked [/]'{media['clip_name']}'")
+            link_success.append(proxy)
+
+        else:
+            logger.error(f"[red]Failed to link [/]'{media['clip_name']}'")
+            link_fail.append(proxy)
+
+    if link_success:
+        print(f"[green]Succeeeded linking: [/]{len(link_success)}")
+
+    if link_fail:
+        print(f"[red]Failed linking: [/]{len(link_fail)}")
+
+    print()
+
+    pre_len = len(media_list)
+    media_list = [x for x in media_list if "Unlinked Proxy" not in x]
+    post_len = len(media_list)
+
+    print(f"[green]{pre_len - post_len} proxy(s) successfully linked.")
+    return media_list
 
 
 def main():
+
+    from .resolve import ResolveObjects
+
     try:
+
+        r_ = ResolveObjects()
         proxy_dir = get_proxy_path()
 
         print(f"Passed directory: '{proxy_dir}'\n")
 
         all_files = recurse_dir(proxy_dir)
         proxy_files = filter_files(all_files, config["filters"]["extension_whitelist"])
-        linked = link_proxies(proxy_files)
+        linked = find_and_link_proxies(r_.project, proxy_files)
 
     except Exception as e:
         print("ERROR - " + str(e))

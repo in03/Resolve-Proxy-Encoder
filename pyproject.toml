@@ -20,6 +20,7 @@ deepdiff = "^5.7.0"
 pymediainfo = "^5.1.0"
 commonregex = "^1.5.3"
 notify-py = "^0.3.3"
+shortuuid = "^1.0.8"
 yaspin = "^2.1.0"
 tk = "^0.1.0"
 
@@ -45,4 +46,4 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-rprox = "resolve_proxy_encoder.cli:main"
+rprox = "resolve_proxy_encoder.app.cli:main"

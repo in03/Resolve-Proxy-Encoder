@@ -1,28 +1,22 @@
 # Launch multiple workers
 
+import logging
 import multiprocessing
 import os
 import platform
 import subprocess
-import time
 from shutil import which
 
 from rich import print
-from yaspin import yaspin
 
-from resolve_proxy_encoder.helpers import (
-    app_exit,
-    get_rich_logger,
-    get_script_from_package,
-    install_rich_tracebacks,
-)
-from resolve_proxy_encoder.settings.app_settings import Settings
-from resolve_proxy_encoder.worker.helpers import get_queue
+from ..app.utils import core, pkg_info
+from ..settings.manager import SettingsManager
+from ..worker.utils import get_queue
 
-install_rich_tracebacks()
-settings = Settings()
-config = settings.user_settings
-logger = get_rich_logger(loglevel=config["celery_settings"]["worker_loglevel"])
+core.install_rich_tracebacks()
+
+config = SettingsManager()
+logger = logging.getLogger(__name__)
 
 
 def prompt_worker_amount(cpu_cores: int):
@@ -85,7 +79,7 @@ def new_worker(id=None):
     def get_celery_binary_path():
 
         # Check if in virtual env. Find.
-        celery_bin = get_script_from_package("Celery")
+        celery_bin = pkg_info.get_script_from_package("Celery")
         if celery_bin:
             return celery_bin
 
@@ -100,7 +94,7 @@ def new_worker(id=None):
         )
 
         logger.error("[red]Couldn't find celery binary! Is it installed?[/]")
-        app_exit(1, -1)
+        core.app_exit(1, -1)
 
     def get_module_path():
         """Get absolute module path to pass to Celery worker"""
@@ -108,7 +102,7 @@ def new_worker(id=None):
         # Change dir to package root
         module_path = os.path.dirname(os.path.abspath(__file__))
 
-        logger.debug(f"Worker path: {module_path}")
+        logger.debug(f"[magenta]Path to worker module: '{module_path}'")
         assert os.path.exists(module_path)
         return os.path.abspath(module_path)
 
@@ -116,7 +110,7 @@ def new_worker(id=None):
         """Get os command to spawn process in a new console window"""
 
         # Get new terminal
-        worker_terminal_args = config["celery_settings"]["worker_terminal_args"]
+        worker_terminal_args = config["worker"]["terminal_args"]
 
         # Check if any args are on path. Probably terminal executable.
         executable_args = [which(x) for x in worker_terminal_args]
@@ -144,26 +138,26 @@ def new_worker(id=None):
                 "Cannot guess installed Linux terminal. Too many distros."
                 + "Please provide a terminal executable in 'worker_terminal_args' settings."
             )
-            app_exit(1, -1)
+            core.app_exit(1, -1)
         else:
             logger.error(
                 f"Could not determine terminal executable for OS: {os_}."
                 + "Please provide a terminal executable in 'worker_terminal_args' settings."
             )
-            app_exit(1, -1)
+            core.app_exit(1, -1)
 
     launch_cmd = [
         get_new_console(),
-        *config["celery_settings"]["worker_terminal_args"],
+        *config["worker"]["terminal_args"],
         f'"{get_celery_binary_path()}"',
         "-A resolve_proxy_encoder.worker",
         "worker",
         get_worker_name(id),
-        get_worker_queue(),
-        *config["celery_settings"]["worker_celery_args"],
+        "- Q ",
+        *config["worker"]["celery_args"],
     ]
 
-    logger.info(f"[cyan]New worker - {id}[/]")
+    logger.info(f"[cyan]NEW WORKER - {id}[/]")
     logger.debug(f"[magenta]{' '.join(launch_cmd)}[/]\n")
 
     subprocess.Popen(
@@ -201,7 +195,7 @@ def main(workers: int = 0):
         launch_workers(prompt_worker_amount(cpu_cores))
 
     print(f"[green]Done![/]")
-    app_exit(0, 5)
+    core.app_exit(0, 5)
 
 
 if __name__ == "__main__":

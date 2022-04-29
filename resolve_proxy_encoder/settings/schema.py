@@ -1,9 +1,9 @@
-import re
-from commonregex import link
 import os
-from ..helpers import resolve_network_path
-from schema import Schema, And, Optional
+import re
 
+from commonregex import link
+
+from schema import And, Optional, Schema
 
 settings_schema = Schema(
     {
@@ -15,15 +15,10 @@ settings_schema = Schema(
             "disable_version_constrain": bool,
         },
         "paths": {
-            "proxy_in_project": bool,
-            "proxy_path_root": lambda p: resolve_network_path(
-                p, must_exist=True, return_local_path_on_fail=False
-            ),
-            "ffmpeg_logfile_path": lambda p: resolve_network_path(
-                p, must_exist=True, return_local_path_on_fail=False
-            ),
+            "proxies_with_source_media": bool,
+            "proxies_in_one_folder": lambda p: os.path.exists(p),
         },
-        "proxy_settings": {
+        "proxy": {
             "ffmpeg_loglevel": lambda l: l
             in [
                 "quiet",
@@ -35,10 +30,9 @@ settings_schema = Schema(
                 "verbose",
                 "debug",
             ],
-            "vid_codec": str,
-            "h_res": str,
-            "v_res": str,
-            "vid_profile": str,
+            "codec": str,
+            "vertical_res": str,
+            "profile": str,
             "pix_fmt": str,
             "audio_codec": str,
             "audio_samplerate": str,
@@ -46,26 +40,32 @@ settings_schema = Schema(
             "ext": And(str, lambda s: s.startswith(".")),
         },
         "filters": {
-            "use_extension_whitelist": bool,
             "extension_whitelist": And(
                 list, lambda l: all(map(lambda s: s.startswith("."), l))
             ),
-            "use_framerate_whitelist": bool,
             "framerate_whitelist": And(list, lambda l: all(map(lambda s: int(s), l))),
         },
-        "celery_settings": {
+        "celery": {
             "host_address": str,
             "broker_url": str,
             "flower_url": str,
             "result_backend": str,
             "result_expires": int,
-            "worker_loglevel": lambda s: s
+        },
+        "worker": {
+            "loglevel": lambda s: s
             in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-            "worker_concurrency": int,
-            "worker_prefetch_multiplier": int,
-            "worker_max_tasks_per_child": int,
-            "worker_terminal_args": list,
-            "worker_celery_args": list,
+            "concurrency": int,
+            "prefetch_multiplier": int,
+            "max_tasks_per_child": int,
+            "terminal_args": list,
+            "celery_args": list,
+        },
+        "chunking": {
+            "enable": bool,
+            "chunk_duration": int,
+            "chunk_threshold": int,
+            "cleanup": bool,
         },
     },
     ignore_extra_keys=True,

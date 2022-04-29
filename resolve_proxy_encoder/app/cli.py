@@ -5,27 +5,47 @@ from rich import print
 # Print CLI title
 fig = Figlet()
 text = fig.renderText("Resolve Proxy Encoder")
-print(f"[green]{text}[/]\n")
-
+print(f"[green]{text}\n")
+import logging
 import subprocess
 import webbrowser
+from typing import Optional
 
 import typer
-from typing import Optional
 from rich.console import Console
 from rich.prompt import Confirm
 
-from resolve_proxy_encoder import checks
-from resolve_proxy_encoder.helpers import get_rich_logger, resolve_network_path
-from resolve_proxy_encoder.settings.app_settings import Settings
+from ..app import checks
+from ..settings.manager import SettingsManager
+from .utils.core import setup_rich_logging
+
+
+def print_routing_key():
+
+    ver_colour = "red"
+    queue = "Unknown"
+
+    if settings["app"]["disable_version_constrain"]:
+
+        ver_colour = "yellow"
+        queue = "celery"
+
+    else:
+        ver_colour = "green" if settings["version_info"]["is_latest"] else "yellow"
+        queue = settings["version_info"]["commit_short_sha"]
+
+    print(f"[cyan]Routing to queue:[/] [{ver_colour}]'{queue}'[/]")
+
 
 # Init classes
 console = Console()
-cli_app = typer.Typer()
-settings = Settings()
+settings = SettingsManager()
 
-config = settings.user_settings
-logger = get_rich_logger(config["app"]["loglevel"])
+cli_app = typer.Typer()
+
+setup_rich_logging()
+logger = logging.getLogger(__name__)
+logger.setLevel(settings["app"]["loglevel"])
 
 
 @cli_app.command()
@@ -36,18 +56,12 @@ def queue():
     """
     checks.check_worker_compatability()
 
-    print("\n")
-
-    if VERSION_INFO:
-        ver_colour = "green" if VERSION_INFO["is_latest"] else "yellow"
-        print(
-            f"[cyan]Routing to queue:[/] [{ver_colour}]'{VERSION_INFO['current_version']}'[/]"
-        )
+    print_routing_key()
 
     print("\n\n[green]Queuing proxies from Resolve's active timeline[/] :outbox_tray:")
-    from resolve_proxy_encoder import resolve_queue_proxies
+    from ..queuer import queue
 
-    resolve_queue_proxies.main()
+    queue.main()
 
 
 @cli_app.command()
@@ -57,9 +71,9 @@ def link():
     source media in open DaVinci Resolve project
     """
 
-    from resolve_proxy_encoder import link_proxies
+    from ..queuer import link
 
-    link_proxies.main()
+    link.main()
 
 
 @cli_app.command()
@@ -75,23 +89,23 @@ def work(
     print("\n")
 
     # Print worker queue
-    if VERSION_INFO:
-        ver_colour = "green" if VERSION_INFO["is_latest"] else "yellow"
-        print(
-            f"[cyan]Consuming from queue: [/][{ver_colour}]'{VERSION_INFO['current_version']}'[/]"
-        )
 
-    if workers_to_launch is not None:
+    ver_colour = "green" if settings["version_info"]["is_latest"] else "yellow"
+    print(
+        f"[cyan]Consuming from queue: [/][{ver_colour}]'{settings['version_info']}'[/]"
+    )
 
-        if workers_to_launch == 0:
-            print(f"[cyan]Starting worker launcher prompt :construction_worker:[/]")
+    if not workers_to_launch:
+        workers_to_launch = 0
 
-        else:
-            print(f"[green]Starting workers! :construction_worker:[/]")
+    if workers_to_launch > 0:
+        print(f"[green]Starting workers! :construction_worker:[/]")
+    else:
+        print(f"[cyan]Starting worker launcher prompt :construction_worker:[/]")
 
-        from resolve_proxy_encoder import start_workers
+    from ..worker import launch_workers
 
-        start_workers.main(workers_to_launch)
+    launch_workers.main(workers_to_launch)
 
 
 @cli_app.command()
@@ -124,29 +138,28 @@ def mon():
     """
 
     print("[green]Launching Flower celery monitor[/] :sunflower:")
-    webbrowser.open_new(config["celery_settings"]["flower_url"])
+    webbrowser.open_new(settings["celery"]["flower_url"])
+
+
+# TODO: Test and flesh out new config command
+# labels: feature
+@cli_app.command()
+def config():
+    """Open user settings configuration file for editing"""
+
+    print("[green]Opening user settings file for modification")
+    webbrowser.open_new(settings.user_file)
 
 
 def init():
     """Run before CLI App load."""
 
-    global VERSION_INFO
-
-    VERSION_INFO = checks.check_for_updates(
-        github_url=config["app"]["update_check_url"],
+    version_info = checks.check_for_updates(
+        github_url=settings["app"]["update_check_url"],
         package_name="resolve_proxy_encoder",
     )
 
-    resolve_network_path(
-        config["paths"]["proxy_path_root"],
-        must_exist=False,
-        return_local_path_on_fail=True,
-    )
-
-    # TODO: Add update method to settings class
-    # There are a few dynamic variables that would be nice to have globally
-    # E.g. `settings.add_setting(current_version)`
-    # labels: enhancement
+    settings.update({"version_info": version_info})
 
 
 def main():

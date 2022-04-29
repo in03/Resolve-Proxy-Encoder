@@ -1,19 +1,17 @@
+import logging
 import platform
 import subprocess
 
-from resolve_proxy_encoder.helpers import (
-    app_exit,
-    get_package_current_commit,
-    get_rich_logger,
-)
+from ..app.utils import core, pkg_info
+from ..settings.manager import SettingsManager
 
-from resolve_proxy_encoder.settings.app_settings import Settings
+core.install_rich_tracebacks()
 
+config = SettingsManager()
+logger = logging.getLogger(__name__)
 
-settings = Settings()
-config = settings.user_settings
-
-logger = get_rich_logger(config["app"]["loglevel"])
+logger = logging.getLogger()
+logger.setLevel(config["worker"]["loglevel"])
 
 
 def check_wsl() -> bool:
@@ -50,25 +48,17 @@ def get_queue():
 
     """
 
-    # Add git SHA Celery queue to prevent queuer/worker incompatibilities
-    git_full_sha = get_package_current_commit("resolve_proxy_encoder")
-
     if config["app"]["disable_version_constrain"]:
+
         logger.warning(
-            "[yellow]Version constrain is disabled! Thar be dragons :dragon_face:[/]"
+            "[yellow]Version constrain is disabled!\n"
+            + "You [bold]must[/] ensure routing and version compatability yourself!"
         )
+
         return "celery"
-
-    if not git_full_sha:
-
-        logger.error(
-            "[red]Couldn't get local package commit SHA!\n"
-            + "Necessary to maintain version constrain.[/]"
-        )
-        app_exit(1, -1)
 
     # TODO: `git_sha` slice returns as 5 characters, not standard 7
     # labels: bug
 
     # Use git standard 7 character short SHA
-    return git_full_sha[::8]
+    return config["version_info"]["commit_short_sha"]

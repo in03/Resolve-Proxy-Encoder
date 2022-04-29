@@ -1,3 +1,5 @@
+import logging
+import operator
 import os
 import re
 import shutil
@@ -5,13 +7,10 @@ import webbrowser
 from functools import reduce
 from operator import getitem
 from pathlib import Path
+from functools import reduce
+from typing import Union, Any
 
 from deepdiff import DeepDiff
-from resolve_proxy_encoder.helpers import (
-    app_exit,
-    get_rich_logger,
-    install_rich_tracebacks,
-)
 from rich import print
 from rich.prompt import Confirm, Prompt
 from ruamel.yaml import YAML
@@ -19,15 +18,22 @@ from yaspin import yaspin
 
 from schema import SchemaError
 
+from ..app.utils import core
 from .schema import settings_schema
 
-# # Hardcoded because we haven't loaded user settings yet
-logger = get_rich_logger("WARNING")
-install_rich_tracebacks()
+core.install_rich_tracebacks()
+logger = logging.getLogger(__name__)
 
-DEFAULT_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "default_settings.yml")
+DEFAULT_SETTINGS_FILE = os.path.join(
+    os.path.dirname(__file__),
+    "default_settings.yml",
+)
+
 USER_SETTINGS_FILE = os.path.join(
-    Path.home(), ".config", "resolve_proxy_encoder", "user_settings.yml"
+    Path.home(),
+    ".config",
+    "resolve_proxy_encoder",
+    "user_settings.yml",
 )
 
 
@@ -40,7 +46,7 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class Settings(metaclass=Singleton):
+class SettingsManager(metaclass=Singleton):
     def __init__(
         self,
         default_settings_file=DEFAULT_SETTINGS_FILE,
@@ -53,13 +59,13 @@ class Settings(metaclass=Singleton):
 
         self.default_file = default_settings_file
         self.user_file = user_settings_file
+        self.user_settings = dict()
 
         # Originally had default settings validated against schema too
         # but realised testing a path exists is not a good idea for defaults.
         # Instead let's write a build time test for this.
 
-        # Validate default settings
-        self.default_settings = self._get_default_settings()
+        self._load_default_file()
 
         # Validate user settings
         if logger.getEffectiveLevel() > 2:
@@ -71,27 +77,38 @@ class Settings(metaclass=Singleton):
             self.spinner.start()
 
         self._ensure_user_file()
-        self.user_settings = self._get_user_settings()
+        self._load_user_file()
         self._ensure_user_keys()
         self._validate_schema()
 
         self.spinner.ok("✅ ")
 
-    def _get_default_settings(self):
+    def __len__(self):
+
+        return len(self.user_settings)
+
+    def __getitem__(self, __items):
+
+        if type(__items) == str:
+            __items = __items.split(" ")
+
+        return reduce(operator.getitem, __items, self.user_settings)
+
+    def _load_default_file(self):
         """Load default settings from yaml"""
 
         logger.debug(f"Loading default settings from {self.default_file}")
 
         with open(os.path.join(self.default_file)) as file:
-            return self.yaml.load(file)
+            self.default_settings = self.yaml.load(file)
 
-    def _get_user_settings(self):
+    def _load_user_file(self):
         """Load user settings from yaml"""
 
         logger.debug(f"Loading user settings from {self.user_file}")
 
         with open(self.user_file, "r") as file:
-            return self.yaml.load(file)
+            self.user_settings = self.yaml.load(file)
 
     def update_nested_setting(self, key_list, value):
         """
@@ -156,7 +173,7 @@ class Settings(metaclass=Singleton):
 
                     self.spinner.fail("❌ ")
                     logger.error("[red]Error creating directory![/]")
-                    app_exit(1, -1)
+                    core.app_exit(1, -1)
 
                 try:
 
@@ -169,12 +186,12 @@ class Settings(metaclass=Singleton):
                     print(
                         f"[red]Couldn't copy default settings to {self.user_file}![/]"
                     )
-                    app_exit(1, -1)
+                    core.app_exit(1, -1)
 
                 self.spinner.stop()
                 webbrowser.open(self.user_file)  # Technically unsupported method
 
-            app_exit(0)
+            core.app_exit(0)
 
     def _ensure_user_keys(self):
         """Ensure user settings have all keys in default settings"""
@@ -182,6 +199,7 @@ class Settings(metaclass=Singleton):
         self.spinner.stop()
 
         diffs = DeepDiff(self.default_settings, self.user_settings)
+        logger.debug("[magenta]Diffs:[/]\n")
 
         # Check for unknown settings
         if diffs.get("dictionary_item_added"):
@@ -227,7 +245,7 @@ class Settings(metaclass=Singleton):
 
                 print()
                 print("[red bold]Cannot continue.\nPlease define missing settings!")
-                app_exit(1, -1)
+                core.app_exit(1, -1)
 
             else:
 
@@ -338,4 +356,8 @@ class Settings(metaclass=Singleton):
                 f"[red]Couldn't validate application settings![/]\n{e}\n"
                 + f"[red]Exiting...[/]\n"
             )
-            app_exit(1, -1)
+            core.app_exit(1, -1)
+
+    def update(self, dict_: dict):
+        logger.info(f"[yellow]Reconfigured settings:\n{dict_}")
+        self.user_settings.update(dict_)
