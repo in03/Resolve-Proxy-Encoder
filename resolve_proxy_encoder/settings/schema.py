@@ -1,6 +1,7 @@
 import re
 from commonregex import link
 import os
+from ..helpers import resolve_network_path
 from schema import Schema, And, Optional
 
 
@@ -15,8 +16,12 @@ settings_schema = Schema(
         },
         "paths": {
             "proxy_in_project": bool,
-            "proxy_path_root": lambda p: os.path.exists(p),
-            "ffmpeg_logfile_path": lambda p: os.path.exists(os.path.dirname(p)),
+            "proxy_path_root": lambda p: resolve_network_path(
+                p, must_exist=True, return_local_path_on_fail=False
+            ),
+            "ffmpeg_logfile_path": lambda p: resolve_network_path(
+                p, must_exist=True, return_local_path_on_fail=False
+            ),
         },
         "proxy_settings": {
             "ffmpeg_loglevel": lambda l: l

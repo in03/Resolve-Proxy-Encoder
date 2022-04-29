@@ -38,10 +38,11 @@ def queue():
 
     print("\n")
 
-    ver_colour = "green" if VERSION_INFO["is_latest"] else "yellow"
-    print(
-        f"[cyan]Routing to queue:[/] [{ver_colour}]'{VERSION_INFO['current_version']}'[/]"
-    )
+    if VERSION_INFO:
+        ver_colour = "green" if VERSION_INFO["is_latest"] else "yellow"
+        print(
+            f"[cyan]Routing to queue:[/] [{ver_colour}]'{VERSION_INFO['current_version']}'[/]"
+        )
 
     print("\n\n[green]Queuing proxies from Resolve's active timeline[/] :outbox_tray:")
     from resolve_proxy_encoder import resolve_queue_proxies
@@ -74,19 +75,23 @@ def work(
     print("\n")
 
     # Print worker queue
-    ver_colour = "green" if VERSION_INFO["is_latest"] else "yellow"
-    print(
-        f"[cyan]Consuming from queue: [/][{ver_colour}]'{VERSION_INFO['current_version']}'[/]"
-    )
+    if VERSION_INFO:
+        ver_colour = "green" if VERSION_INFO["is_latest"] else "yellow"
+        print(
+            f"[cyan]Consuming from queue: [/][{ver_colour}]'{VERSION_INFO['current_version']}'[/]"
+        )
 
-    if workers_to_launch > 0:
-        print(f"[green]Starting workers! :construction_worker:[/]")
-    else:
-        print(f"[cyan]Starting worker launcher prompt :construction_worker:[/]")
+    if workers_to_launch is not None:
 
-    from resolve_proxy_encoder import start_workers
+        if workers_to_launch == 0:
+            print(f"[cyan]Starting worker launcher prompt :construction_worker:[/]")
 
-    start_workers.main(workers_to_launch)
+        else:
+            print(f"[green]Starting workers! :construction_worker:[/]")
+
+        from resolve_proxy_encoder import start_workers
+
+        start_workers.main(workers_to_launch)
 
 
 @cli_app.command()
@@ -132,7 +137,11 @@ def init():
         package_name="resolve_proxy_encoder",
     )
 
-    resolve_network_path(config["paths", "proxy_path_root"])
+    resolve_network_path(
+        config["paths"]["proxy_path_root"],
+        must_exist=False,
+        return_local_path_on_fail=True,
+    )
 
     # TODO: Add update method to settings class
     # There are a few dynamic variables that would be nice to have globally

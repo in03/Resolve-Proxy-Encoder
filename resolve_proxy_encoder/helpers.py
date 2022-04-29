@@ -2,8 +2,6 @@
 import json
 import logging
 import os
-import pathlib
-import socket
 import subprocess
 import sys
 import time
@@ -19,6 +17,11 @@ from rich.logging import RichHandler
 from rich.prompt import Prompt
 
 from resolve_proxy_encoder import python_get_resolve
+from resolve_proxy_encoder.settings.app_settings import Settings
+
+
+settings = Settings()
+config = settings.user_settings
 
 
 class fragile(object):
@@ -69,7 +72,7 @@ def install_rich_tracebacks(show_locals=False):
     install(show_locals=show_locals)
 
 
-def app_exit(level: int = 0, timeout: int = 0, cleanup_funcs: list = None):
+def app_exit(level: int = 0, timeout: int = 0, cleanup_funcs: list = []):
 
     """
     Exit function to allow time to
@@ -209,41 +212,22 @@ def get_resolve_objects():
     )
 
 
-def resolve_network_path(local_path, strict=True):
+def resolve_network_path(local_path):
     """
     Resolve cross-platform network paths from local mapped mounts
     Args:
         - local_path (str): local path to resolve
-        - strict (bool): return None for unresolvable path or re-return local_path
+        - must_exist (bool): if True, raise an error if the path doesn't exist
+        - fail_returns_local_path (bool): return None for unresolvable path or re-return local_path
 
     """
 
-    abspath = pathlib.Path(local_path).resolve()
+    if os.path.exists(local_path):
+        return local_path
 
-    try:
-
-        # First two segments will be leading slashes
-        path_segs = str(abspath).split(os.path.sep)
-        ip = path_segs[2]
-
-        hostname = socket.gethostbyaddr(ip)[0]
-
-    except IndexError or socket.gaierror as e:
-
-        error_msg = f"Path is not a network location or IP unresolvable\n{e}"
-
-        if strict:
-            logging.error(error_msg)
-            return None
-
-        else:
-            logging.debug(error_msg)
-            return local_path
-    else:
-
-        # Substitute hostname
-        path_segs[2] = hostname
-        return os.path.sep.join(path_segs)
+    path_maps = config["paths"]["path_maps"]
+    print(path_maps)
+    return
 
 
 def get_package_current_commit(package_name: str) -> Union[str, None]:
@@ -358,7 +342,7 @@ def get_remote_latest_commit(github_url: str) -> Union[str, None]:
     return remote_latest_commit
 
 
-def get_script_from_package(script_name: str) -> Union[Path, None]:
+def get_script_from_package(script_name: str) -> Union[str, None]:
     """Get path to a named script in the current package
 
     Allows us to call scripts buried in a virtual env like pipx.
@@ -372,7 +356,6 @@ def get_script_from_package(script_name: str) -> Union[Path, None]:
 
         file_ = x.lower()
         if script_name.lower() in file_.lower():
-
             return os.path.abspath(os.path.join(scripts_dir, file_))
 
     return None
