@@ -92,7 +92,7 @@ def work(
 
     ver_colour = "green" if settings["version_info"]["is_latest"] else "yellow"
     print(
-        f"[cyan]Consuming from queue: [/][{ver_colour}]'{settings['version_info']}'[/]"
+        f"[cyan]Consuming from queue: [/][{ver_colour}]'{settings['version_info']['commit_short_sha']}'[/]"
     )
 
     if not workers_to_launch:

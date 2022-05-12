@@ -7,13 +7,12 @@ import tkinter.messagebox
 
 from celery import group
 from rich import print as print
-from icecream import ic
 from yaspin import yaspin
 
 from ..app.utils import core
 from ..settings.manager import SettingsManager
 from ..worker.tasks.encode.tasks import encode_proxy
-from . import chunking, handlers, link, resolve
+from . import handlers, link, resolve
 
 settings = SettingsManager()
 
@@ -169,17 +168,12 @@ def main():
 
     print("\n")
 
-    # Split jobs into smaller jobs
-    jobs = chunking.chunk_jobs(jobs)
-    print(jobs)
-
     tasks = add_queuer_data(
         jobs,
         project=project_name,
         timeline=timeline_name,
         proxy_settings=settings["proxy"],
         paths_settings=settings["paths"],
-        chunk_settings=settings["chunking"],
     )
 
     job = queue_jobs(tasks)

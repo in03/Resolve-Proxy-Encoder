@@ -1,7 +1,7 @@
 ---  # Resolve Proxy Encoder User configuration file
 
 # NOTE: 
-# Proxy paths, codecs, resolution, chunking, filters, etc are all inherited from the queuer's user configuration.
+# Proxy paths, codecs, resolution, filters, etc are all inherited from the queuer's user configuration.
 # 'Celery' and 'Worker' settings are pulled from local user configuration.
 app:
 
@@ -72,10 +72,3 @@ worker:
   max_tasks_per_child: 1
   terminal_args: [] # use alternate shell? Recommend windows terminal ("wt") on Windows.
   celery_args: [-l, INFO, -P, solo, --without-mingle, --without-gossip]
-
-chunking: # Distributed encoding. Good for longer files.
-
-  enable: true
-  chunk_duration: 30
-  chunk_threshold: 200 # TODO: Chunk a job if longer than this
-  cleanup: True

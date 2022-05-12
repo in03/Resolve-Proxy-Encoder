@@ -23,6 +23,7 @@ notify-py = "^0.3.3"
 shortuuid = "^1.0.8"
 yaspin = "^2.1.0"
 tk = "^0.1.0"
+ffmpeg-python = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 mkdocs-material = "^7.3.6"
