@@ -1,11 +1,12 @@
 import imp
-import pathlib
 import logging
 import os
+import pathlib
 import sys
 
 from rich import print
 
+from ..app.job import Job, MediaPoolRefs, ProjectMetadata, SourceMetadata
 from ..app.utils import core
 from ..settings.manager import SettingsManager
 
@@ -163,9 +164,6 @@ def get_resolve_timelines(project, active_timeline_first=True):
     return timelines
 
 
-# TODO: Is this worth refactoring as a class?
-# Like a 'job' class with these functions as class methods?
-# labels: enhancement
 def get_resolve_proxy_jobs(media_pool_items):
     """Return source metadata for each media pool item that passes configured criteria.
 
@@ -187,6 +185,7 @@ def get_resolve_proxy_jobs(media_pool_items):
 
     jobs = []
     seen = []
+    mpi_refs = MediaPoolRefs()
 
     for media_pool_item in media_pool_items:
 
@@ -267,45 +266,37 @@ def get_resolve_proxy_jobs(media_pool_items):
                 )
                 continue
 
-        # Get expected proxy path
-        file_path = clip_properties["File Path"]
-        p = pathlib.Path(file_path)
+        project_metadata = ProjectMetadata(r_.project, r_.timeline)
 
-        proxy_dir = os.path.normpath(
-            os.path.join(
-                settings["paths"]["proxy_path_root"],
-                os.path.dirname(p.relative_to(*p.parts[:1])),
-            )
+        # Some picking and parsing, need to get hands dirty
+        cp = clip_properties
+        source_metadata = SourceMetadata(
+            clip_name=cp["Clip Name"],
+            file_name=cp["File Name"],
+            file_path=cp["File Path"],
+            duration=cp["Duration"],
+            resolution=list(cp["Resolution"]).split("x"),
+            frames=int(cp["Frames"]),
+            fps=float(cp["FPS"]),
+            h_flip=True if cp["H-FLIP"] == "On" else False,
+            v_flip=True if cp["H-FLIP"] == "On" else False,
+            proxy_status=cp["Proxy"],
+            proxy_media_path=cp["Proxy Media Path"],
+            start=int(cp["Start"]),
+            end=int(cp["End"]),
+            start_tc=cp["Start TC"],
+            end_tc=cp["End TC"],
         )
 
-        # TODO: These would definitely be nicer as class attributes
-        # labels: enhancement
-        cp = clip_properties
-        job = {
-            "clip_name": cp["Clip Name"],
-            "file_name": cp["File Name"],
-            "file_path": cp["File Path"],
-            "duration": cp["Duration"],
-            "resolution": str(cp["Resolution"]).split("x"),
-            "frames": int(cp["Frames"]),
-            "fps": float(cp["FPS"]),
-            "h_flip": True if cp["H-FLIP"] == "On" else False,
-            "v_flip": True if cp["H-FLIP"] == "On" else False,
-            "proxy_status": cp["Proxy"],
-            "proxy_media_path": cp["Proxy Media Path"]
-            if not len(cp["Proxy Media Path"])
-            else cp["Proxy Media Path"],
-            "proxy_dir": proxy_dir,
-            "start": int(cp["Start"]),
-            "end": int(cp["End"]),
-            "start_tc": cp["Start TC"],
-            "end_tc": cp["End TC"],
-            "media_pool_item": media_pool_item,
-        }
+        # Define job
+        job = Job(project_metadata, source_metadata, settings)
+
+        # Add media pool item reference
+        mpi_refs.add_ref(source_metadata.file_name, media_pool_item)
 
         logger.debug(f"[magenta]Clip properties: {job}\n")
         jobs.append(job)
 
     logger.info(f"[green]Total queuable clips on timeline: {len(jobs)}[/]")
 
-    return jobs
+    return jobs, mpi_refs
