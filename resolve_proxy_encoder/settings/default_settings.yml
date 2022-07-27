@@ -30,17 +30,12 @@ filters:
   extension_whitelist : [.mov, .mp4, .mxf, .avi] 
   framerate_whitelist : [24, 25, 30, 50, 60]
 
-celery:
-  host_address: 192.168.1.19
-  broker_url:  redis://192.168.1.19:6379/0
-  flower_url: http://192.168.1.19:5555
-  result_backend: redis://192.168.1.19:6379/0
-  result_expires: 60 # 10 mins
+broker:
+  url:  redis://192.168.1.19:6379/0
+  job_expires: 3600 # 1 hour (cleared if not received by worker)
+  result_expires: 86400 # 1 day (Needed for webapp monitor)
 
 worker:
   loglevel: INFO
-  concurrency: 1
-  prefetch_multiplier: 1
-  max_tasks_per_child: 1
   terminal_args: [] # use alternate shell? Recommend windows terminal ("wt") on Windows.
   celery_args: [-l, INFO, -P, solo, --without-mingle, --without-gossip]

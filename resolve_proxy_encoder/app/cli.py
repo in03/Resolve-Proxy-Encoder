@@ -4,13 +4,12 @@ import logging
 import subprocess
 import webbrowser
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import typer
 from pyfiglet import Figlet
 from rich import print
 from rich.console import Console
-from rich.prompt import Confirm
 from rich.rule import Rule
 
 from .utils import pkg_info
@@ -18,6 +17,11 @@ from .utils import pkg_info
 # Init classes
 cli_app = typer.Typer()
 console = Console()
+
+# Get VC Key
+VC_KEY_FILE = Path(__file__).parent.parent.parent.joinpath("version_constraint_key")
+with open(VC_KEY_FILE) as file:
+    VC_KEY = file.read()
 
 # TODO: Add global option to hide banner
 # labels: enhancement
@@ -39,18 +43,13 @@ def draw_banner():
     # Get build info
     build_info = pkg_info.get_build_info("Resolve-Proxy-Encoder")
 
-    # Get VC key
-    vc_key_file = Path(__file__).parent.parent.parent.joinpath("version_constraint_key")
-    with open(vc_key_file) as file:
-        vc_key = file.read()
-
     # Print banner data
     if build_info["build"] == "release":
 
         print(
             f"[bold]{str(build_info['build']).capitalize()} build[/] "
             f"{build_info['version']} | "
-            f"[bold]VC key:[/] '{vc_key}'"
+            f"[bold]VC key:[/] '{VC_KEY}'"
         )
 
     else:
@@ -59,7 +58,7 @@ def draw_banner():
             f"[bold]{str(build_info['build']).capitalize()} build[/] "
             f"{'([green]installed[/] :package:)' if build_info['installed'] else '([yellow]cloned[/] :hammer_and_wrench:)'} "
             f"'{build_info['version'][:7:]}' | "
-            f"[bold]Version constraint key[/] '{vc_key}'"
+            f"[bold]Version constraint key[/] '{VC_KEY}'"
         )
 
     Rule()
@@ -184,7 +183,7 @@ def work(
 
 @cli_app.command()
 def purge():
-    """Purge all tasks from Celery.
+    """Purge all tasks from Celery according to VC key
 
     All tasks will be removed from all queues,
     including results and any history in Flower.
@@ -201,33 +200,23 @@ def purge():
     console.rule(f"[red bold]Purge all tasks! :fire:", align="left")
     print("\n")
 
-    if Confirm.ask(
-        "[yellow]Are you sure you want to purge all tasks?\n"
-        "All active tasks and task history will be lost![/]"
-    ):
-        print("[green]Purging all worker queues[/] :fire:")
-        subprocess.run(["celery", "-A", "resolve_proxy_encoder.worker", "purge", "-f"])
-
-
-@cli_app.command()
-def mon():
-    """
-    Launch Flower Celery monitor in default browser new window
-    """
-
-    # Init
-    from ..settings.manager import SettingsManager
-
-    settings = SettingsManager()
-    # End init
-
-    print("\n")
-    console.rule(
-        f"[green bold]Start Flower Celery monitor[/] :sunflower:", align="left"
+    subprocess.run(
+        ["celery", "-A", "resolve_proxy_encoder.worker", "purge", "-Q", VC_KEY]
     )
+
+
+# TODO: Would be great if we can pass options unparsed by Typer
+# This command could serve as a gateway to all Celery commands,
+# but typer parses 'f' in 'broker purge -f' as an undefined option
+@cli_app.command()
+def celery(command: List[str]):
+    """Pass celery commands to Celery buried within venv"""
+
+    print("\n")
+    console.rule(f"[cyan bold]Celery command :memo:", align="left")
     print("\n")
 
-    webbrowser.open_new(settings["celery"]["flower_url"])
+    subprocess.run(["celery", "-A", "resolve_proxy_encoder.worker", command])
 
 
 @cli_app.command()

@@ -4,11 +4,14 @@ import logging
 import os
 
 from celery import group
-from rich import print as print
+from rich import print
 
+
+from ..app import broker
 from ..app.utils import core
 from ..settings.manager import SettingsManager
 from ..worker.tasks.encode.tasks import encode_proxy
+from ..worker.celery import app as celery_app
 from . import handlers, link, resolve
 
 settings = SettingsManager()
@@ -40,45 +43,25 @@ def add_queuer_data(jobs, **kwargs):
     return jobs
 
 
-def queue_jobs(jobs):
-    """Send jobs as a Celery 'group'"""
+def queue_tasks(tasks):
+    """Block until all queued tasks finish, notify results."""
 
-    # Wrap job objects in Celery task function
-    callable_tasks = [encode_proxy.s(x) for x in jobs]
+    # Wrap task objects in Celery task function
+    callable_tasks = [encode_proxy.s(x) for x in tasks]
     logger.debug(f"[magenta]callable_tasks:[/] {callable_tasks}")
 
-    # Create job group to retrieve job results as batch
+    # Create task group to retrieve job results as batch
     task_group = group(callable_tasks)
 
+    progress = broker.ProgressTracker(settings, callable_tasks)
+
     # Queue job
-    queued_group = task_group.apply_async()
-    logger.debug(f"[cyan]Queued tasks {queued_group}[/]")
+    results = task_group.apply_async(expires=settings["broker"]["job_expires"])
+    logger.debug(f"[cyan]Queued tasks {results}[/]")
 
-    return queued_group
-
-
-def wait_jobs(jobs):
-    """Block until all queued jobs finish, notify results."""
-
-    result = jobs.join()
-
-    # Notify failed
-    if jobs.failed():
-        fail_message = (
-            "Some videos failed to encode!"
-            + f"Check flower dashboard at address: {settings['celery']['flower_url']}."
-        )
-        print("[red]fail_message[/]")
-        core.notify(fail_message)
-
-    # Notify complete
-    complete_message = f"Completed encoding {jobs.completed_count()} proxies."
-    print(f"[green]{complete_message}[/]")
-    print("\n")
-
-    core.notify(complete_message)
-
-    return result
+    # report progress is blocking!
+    final_results = progress.report_progress(results)
+    return final_results
 
 
 def main():
@@ -148,11 +131,25 @@ def main():
 
     print("\n")
 
-    job_group = queue_jobs(tasks)
-
     core.notify(f"Started encoding job '{project_name} - {timeline_name}'")
-    print(f"[yellow]Waiting for job to finish. Feel free to minimize.[/]")
-    wait_jobs(job_group)
+    # print(f"[yellow]Waiting for job to finish. Feel free to minimize.[/]")
+
+    # Queue tasks to workers and track task progress
+    results = queue_tasks(tasks)
+
+    if results.failed():
+        fail_message = "Some videos failed to encode!"
+        print("[red]fail_message[/]")
+        core.notify(fail_message)
+
+    # Notify complete
+    complete_message = f"Completed encoding {results.completed_count()} proxies."
+    print(f"[green]{complete_message}[/]")
+    print("\n")
+
+    core.notify(complete_message)
+
+    _ = results.join()  # Must always call join, or results don't expire
 
     # Get media pool items back
     logger.debug(f"[magenta]Restoring media-pool-items[/]")
